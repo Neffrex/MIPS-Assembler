@@ -94,19 +94,86 @@ b: .asciiz "5"
 s: .asciiz "x"
 
 """
-#opcode = {
-#    "lw": 0x23,
-#    "sw": 0x2B,
-#    "beq": 0x4,
-#    "j": 0x2,
-#}
-#funct = {
-#    "add": 0x20,
-#    "sub": 0x22,
-#    "and": 0x24,
-#    "or": 0x25,
-#    "slt": 0x2A,
-#}
+
+# TODO: Options to export to a configuration file
+DATA_SEGMENT_BASE_ADDRESS = 0x64
+TEXT_SEGMENT_BASE_ADDRESS = 0
+COMMENT_SYMBOL = "#"
+
+# Constant Values
+WORD_SIZE = 4 #Bytes
+HALF_SIZE = 2 #Bytes
+BYTE_SIZE = 1 #Bytes
+CHAR_SIZE = 1 #Bytes
+INSTRUCTION_SIZE = WORD_SIZE
+
+# Functions
+
+def getLimit(bytes):
+    return 2 ** (bytes*8)
+
+def ascii_callback(*literals):
+    global location_counter
+    result = ""
+    for literal in literals:
+        for char in literal[1:-1]:
+            result += str.format("{:02x}", ord(char))
+            location_counter += CHAR_SIZE
+    return result
+
+def asciiz_callback(*literals):
+    global location_counter
+    result = ""
+    for literal in literals:
+        result += ascii_callback(literal)+'\0'
+        # The location_counter is incremented inside the ascii_callback() function
+        # Therefore, it only needs to count the additional '\0'
+        location_counter += CHAR_SIZE
+    return result
+
+def byte_callback(*literals):
+    global location_counter
+    result = ""
+    for literal in literals:
+        if (abs(int(literal)) > getLimit(BYTE_SIZE)):
+            raise Exception(f"Operand {literal} exceeds the size of a byte ({getLimit(BYTE_SIZE)})")
+        result += str.format("{:02x}", int(literal))
+        location_counter += BYTE_SIZE
+    return result
+
+def half_callback(*literals):
+    global location_counter
+    result = ""
+    for literal in literals:
+        if (abs(int(literal)) > getLimit(HALF_SIZE)):
+            raise Exception(f"Operand {literal} exceeds the size of a half ({getLimit(HALF_SIZE)})")
+        result += str.format("{:04x}", int(literal))
+        location_counter += HALF_SIZE
+    return result
+
+def word_callback(*literals):
+    # TODO
+    global location_counter
+    result = ""
+    for literal in literals:
+        if (abs(int(literal)) > getLimit(WORD_SIZE)):
+            raise Exception(f"Operand {literal} exceeds the size of a word ({getLimit(WORD_SIZE)})")
+        result += str.format("{:08x}", int(literal))
+        location_counter += WORD_SIZE
+    return result
+
+def data_callback(address=DATA_SEGMENT_BASE_ADDRESS):
+    global location_counter
+    location_counter = address
+
+def text_callback(address=TEXT_SEGMENT_BASE_ADDRESS):
+    global location_counter
+    location_counter = address
+
+def globl_callback(label):
+    pass
+
+# Variables
 symbol_table = dict()
 opcode_table = {
     "ADD": (0x20, 'R'),
@@ -120,84 +187,67 @@ opcode_table = {
     "J"  : (0x2 , 'J')
 }
 directive_table = {
-    ".ascii",
-    ".asciiz",
-    ".byte",
-    ".half",
-    ".word",
-    ".text",
-    ".data",
-    ".globl"
+    ".ascii": ascii_callback,
+    ".asciiz": asciiz_callback,
+    ".byte": byte_callback,
+    ".half": half_callback,
+    ".word": word_callback,
+    ".text": text_callback,
+    ".data": data_callback,
+    ".globl": globl_callback
 }
-location_counter = 0
+location_counter = -1
 
+# Splits the line in 4 fields: Label, Mnemonic, Operands and Comment
+# Label: String, Mnemonic: String, Operands: List(String), Comment: String
+# In case of a field that is not present in the line it would asign `None` to it
+def tokenize(line):
+    label = mnemonic = comment = None
+    operands = []
+    
+    # Identify Comment
+    tokens = line.split(COMMENT_SYMBOL, 1)
+    comment = tokens[1] if len(tokens) > 1 else None
 
-# Transforms the line into a set of tokens
-def tokenize (line):
-    replacements = {
-        "\t": " ",
-        "(" : " ",
-        ")" : "",
-        "," : "",
-    }
-    # Translates some characters following the table above
-    transformation = line.translate(str.maketrans(replacements))
-    # Remove comments
-    transformation = transformation.split("#", 1)[0]
-    # Filter empty token
-    transformation = filter(None, transformation.split(" "))
-    # Return the transformation ass a list
-    return list(transformation)
-
-# Checks if the token is a label and appends it to the symbol table if it is
-def check_label (token):
-    # Check if there's a label
-    if token[-1] == ':':
-        if token in symbol_table:
-            # throw error
-            pass
-        
-        # It is a label
-        return True
-    # It is NOT a label
-    return False
-
-def process_directive(directive):
-    print(directive)
+    # Handle the Functional Tokens
+    phase = 0
+    uncommented_tokens = tokens[0].replace(',',' ').split()
+    while len(uncommented_tokens) > 0:
+        match phase:
+            case 0: # Possible Label
+                if uncommented_tokens[0].endswith(":"):
+                    label = uncommented_tokens[0]
+                    del uncommented_tokens[0]
+            case 1: # Mnemonic
+                mnemonic = uncommented_tokens[0]
+            case 2: # Operands
+                operands = uncommented_tokens[1:]
+                break
+        phase+=1
+    
+    return label, mnemonic, operands, comment
 
 
 for line_number, line in enumerate(archivo.split("\n")):
     
     # Tokenize the line
-    tokens = tokenize(line)
+    label, mnemonic, operands, comment = tokenize(line)
 
-    # Ignore in case of a comment or a blank line
-    if len(tokens) == 0 or tokens[0][0:1] == '#':
-        continue
-    
-    current_token = tokens[0]
+    # Handle Label
+    if label:
+        symbol_table[label] = location_counter
 
-    # Check for label
-    if check_label(current_token):
-        # Append the label to the symbol table
-        symbol_table[current_token[0:-1]] = location_counter
-        del(tokens[0])
-
-    if len(tokens) != 0:
-        current_token = tokens[0]
-    else:
-        continue
-
-    if str.upper(current_token) in opcode_table:
-        # Is an instruction
-        print(str.upper(current_token))
-        # TODO: Process tokens
-        location_counter += 1
-    elif current_token in directive_table:
-        # Is a directive
-        process_directive(tokens[tokens.index(current_token):len(tokens)])
-    else:
-        raise Exception("Wrong Mnemonic %(current_token)s")
-
-    
-#print(symbol_table)
+    # Handle Mnemonic (Instruction / Directive)
+    if mnemonic:
+        mnemonic_upper=str.upper(mnemonic)
+        if mnemonic_upper in opcode_table:
+            # TODO Write in intermediate file
+            print(mnemonic, operands)
+            location_counter += INSTRUCTION_SIZE
+        elif mnemonic in directive_table:
+            # Callback function with optional operands
+            result = directive_table[mnemonic](*operands)
+            if result != None:
+                print(result)
+        else:
+            raise Exception(f"Undefined Mnemonic: {mnemonic}")
