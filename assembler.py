@@ -12,14 +12,14 @@ import sys
 
 # TODO: Options to export to a configuration file
 DATA_SEGMENT_BASE_ADDRESS = 0x64
-TEXT_SEGMENT_BASE_ADDRESS = 0
+TEXT_SEGMENT_BASE_ADDRESS = 0x0
 COMMENT_SYMBOL = "#"
 
 # Constant Values
-WORD_SIZE = 4 #Bytes
-HALF_SIZE = 2 #Bytes
-BYTE_SIZE = 1 #Bytes
-CHAR_SIZE = 1 #Bytes
+CHAR_SIZE = 1
+BYTE_SIZE = 1
+HALF_SIZE = 1
+WORD_SIZE = 1
 INSTRUCTION_SIZE = WORD_SIZE
 
 #---         ---#
@@ -54,7 +54,8 @@ def ascii_callback(*literals):
     result = ""
     for literal in literals:
         for char in literal[1:-1]:
-            result += str.format("{:02x}", ord(char))
+            #result += str.format("{:02x}", ord(char))
+            result += f"{ord(char)} "
             location_counter = int(location_counter) + CHAR_SIZE
     return result
 
@@ -62,7 +63,8 @@ def asciiz_callback(*literals):
     global location_counter
     result = ""
     for literal in literals:
-        result += ascii_callback(literal) + str(00)
+        #result += ascii_callback(literal) + str(0)
+        result += f"{ascii_callback(literal)} 0 "
         # The location_counter is incremented inside the ascii_callback() function
         # Therefore, it only needs to count the additional '\0'
         location_counter = int(location_counter) + CHAR_SIZE
@@ -74,7 +76,8 @@ def byte_callback(*literals):
     for literal in literals:
         if (abs(int(literal)) > getLimit(BYTE_SIZE)):
             raise Exception(f"Operand {literal} exceeds the size of a byte ({getLimit(BYTE_SIZE)})")
-        result += str.format("{:02x}", int(literal))
+        #result += str.format("{:02x}", int(literal))
+        result += f"{literal} "
         location_counter = int(location_counter) + BYTE_SIZE
     return result
 
@@ -84,7 +87,8 @@ def half_callback(*literals):
     for literal in literals:
         if (abs(int(literal)) > getLimit(HALF_SIZE)):
             raise Exception(f"Operand {literal} exceeds the size of a half ({getLimit(HALF_SIZE)})")
-        result += str.format("{:04x}", int(literal))
+        #result += str.format("{:04x}", int(literal))
+        result += f"{literal} "
         location_counter = int(location_counter) + HALF_SIZE
     return result
 
@@ -94,7 +98,8 @@ def word_callback(*literals):
     for literal in literals:
         if (abs(int(literal)) > getLimit(WORD_SIZE)):
             raise Exception(f"Operand {literal} exceeds the size of a word ({getLimit(WORD_SIZE)})")
-        result += str.format("{:08x}", int(literal))
+        #result += str.format("{:08x}", int(literal))
+        result += f"{literal} "
         location_counter = int(location_counter) + WORD_SIZE
     return result
 
@@ -112,6 +117,9 @@ def globl_callback(label):
     #return ".globl " + str(label)
     pass
 
+def end_callback():
+    return ".end"
+
 #---                   ---#
 #-- Auxiliary Functions --#
 #---                   ---#
@@ -121,8 +129,6 @@ def getLimit(bytes):
 
 def effective_address(base, offset):
   pass
-
-
 
 # Splits the line in 4 fields: Label, Mnemonic, Operands and Comment
 # Label: String, Mnemonic: String, Operands: List(String), Comment: String
@@ -142,7 +148,7 @@ def tokenize(line):
         match phase:
             case 0: # Possible Label
                 if uncommented_tokens[0].endswith(":"):
-                    label = uncommented_tokens[0]
+                    label = uncommented_tokens[0][0:-1]
                     del uncommented_tokens[0]
             case 1: # Mnemonic
                 mnemonic = uncommented_tokens[0]
@@ -182,16 +188,26 @@ def parse_instruction(*tokens):
 
     op = str(tokens[0]).upper()
     inst_data = ISA[op]
-    # TODO: Check if every field of the `inst_data` is valid, and change the parse so the `-` don't define any entry on the ISA
+    opcode = int(inst_data["OP"], 2)
+    # TODO: Check if every field of the `inst_data` is valid, and consider changing the parser so the `-` don't define any entry on the ISA
     match inst_data["FORMAT"]:
         case "R":
-            opcode = int(inst_data["OP"], 2)
             rs = parse_token(inst_data["RS"], tokens)
             rt = parse_token(inst_data["RT"], tokens)
             rd = parse_token(inst_data["RD"], tokens)
             shamt = parse_token(inst_data["SHAMT"], tokens)
             funct = parse_token(inst_data["FUNCT"], tokens)
-            print("{:08X}".format(int("{:06b}{:05b}{:05b}{:05b}{:05b}{:06b}".format(opcode, rs, rt, rd, shamt, funct), 2)))
+            bin_inst = "{:06b}{:05b}{:05b}{:05b}{:05b}{:06b}".format(opcode, rs, rt, rd, shamt, funct)
+        case "I":
+            rs = parse_token(inst_data["RS"], tokens)
+            rt = parse_token(inst_data["RT"], tokens)
+            inm16 = parse_token(inst_data["RD"], tokens)
+            bin_inst = "{:06b}{:05b}{:05b}{:016b}".format(opcode, rs, rt, inm16 % (1<<16))
+        case "J":
+            Inm26 = parse_token(inst_data["RS"], tokens)
+            bin_inst = "{:06b}{:026b}".format(opcode, Inm26)
+    return("{:08X}".format(int(bin_inst, 2)))
+
 
 
 def parse_token(format, tokens):
@@ -214,7 +230,7 @@ def parse_token(format, tokens):
             else:
                 raise Exception(ERROR_NO_SUCH_REGISTER.format(tokens[field_num]))
         case "B":
-            start_base = str(tokens[field_num]).find("(")
+            start_base = str(tokens[field_num]).find("(")+1
             end_base = str(tokens[field_num]).find(")")
             base_register = tokens[field_num][start_base:end_base]
             if base_register in register_table:
@@ -236,6 +252,14 @@ def parse_token(format, tokens):
                 return int(tokens[field_num])
             else: 
                 raise Exception(ERROR_WRONG_ADDRESS_FORMAT.format(tokens[field_num]))
+        case "D":
+            if tokens[field_num] in symbol_table:
+                # Return the value of the label
+                return symbol_table[tokens[field_num]] - (location_counter+1)
+            elif str(tokens[field_num]).isdigit():
+                return int(tokens[field_num]) - (location_counter+1)
+            else:
+                raise Exception(ERROR_WRONG_ADDRESS_FORMAT.format(tokens[field_num]))
 
 def init():
     global directive_table
@@ -250,7 +274,8 @@ def init():
         ".word":    word_callback,
         ".text":    text_callback,
         ".data":    data_callback,
-        ".globl":   globl_callback
+        ".globl":   globl_callback,
+        ".end":     end_callback
     }
 
     # TODO: Considerate change this table to an enum
@@ -296,7 +321,7 @@ def init():
         "J": "{:06b}{:026b}"
     }
 
-    parse_ISA("ISA.cfg")
+    parse_ISA("/home/casa/Documents/Python/MIPS-Assembler/ISA.cfg")
 
 
 def main():
@@ -313,9 +338,12 @@ def main():
 
     # TODO: Asign the first parameter to the source code name
     # Name of the source code file
-    source_code_name = "mult.asm"
+    source_code_name = "/home/casa/Documents/Python/MIPS-Assembler/mult.asm"
     # Name of the halfway code file
     halfway_code_name = source_code_name + '.tmp'
+    # Name of the machine code file, the output file
+    machine_code_name = str(source_code_name).split(".")[0] + '.mem'
+    
     # Open the files
     source_code = open(source_code_name, 'r')
     source_lines = source_code.readlines()
@@ -329,6 +357,7 @@ def main():
         # Handle Label
         if label:
             symbol_table[label] = location_counter
+            halfway_code.write(label + ":\n")
 
         # Handle Mnemonic (Instruction / Directive)
         if mnemonic:
@@ -341,13 +370,17 @@ def main():
                 # Callback function with optional operands
                 result = directive_table[mnemonic](*operands)
                 if result != None:
-                    halfway_code.write(result  + "\n")
+                    halfway_code.write(result + "\n")
             else:
                 raise Exception(f"Undefined Mnemonic: {mnemonic}")
+    halfway_code.write(".end\n")
 
-    segment = None
+    # Handle files
     halfway_code.close()
     halfway_code = open(halfway_code_name, 'r')
+    machine_code = open(machine_code_name, 'w')
+
+    segment = None
     halfway_lines = halfway_code.readlines()
     # Second Pass of the assembler
     location_counter = 0
@@ -356,22 +389,32 @@ def main():
         # Handle Segment Directive
         if tokens[0] == ".text" or tokens [0] == ".data":
             segment = tokens[0]
-            location_counter = tokens[1]
+            location_counter = int(tokens[1])
             continue
 
+        if tokens[0] == ".end":
+            machine_code.write("\n")
+            break
     
+        if tokens[0].endswith(":"):
+            machine_code.write("\n# {}\n {:02X}/ ".format(tokens[0], location_counter))
+            continue
+
         # Handle Instructions/Data
         if segment == ".text":
             # Text segment
             mnemonic = tokens[0]
             mnemonic_upper = mnemonic.upper()
             if (mnemonic_upper in ISA):
-                parse_instruction(*tokens)
+                machine_code.write(f"{parse_instruction(*tokens)} ")
+                location_counter += int(INSTRUCTION_SIZE)
+            else:
+                raise Exception(f"ERROR: No such instruction: {mnemonic}")
         elif segment == ".data":
             # Data segment
             for token in tokens:
-                #print("{:02x}".format(token))
-                pass
+                machine_code.write("{:08X} ".format(int(token)))
+                location_counter += int(WORD_SIZE)
         else:
             # Undefined segment
             raise Exception("Error: No segment specified, try adding the directives `.text` or `.data` before the start of a segment")
