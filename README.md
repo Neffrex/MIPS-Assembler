@@ -28,5 +28,12 @@ Keep in mind that it doesn't have all the functionality you would expect from a 
 # :bulb: Things to be considered
 
 As this implementation is design for a custom CPU, the `.byte`, `.half` and `.word` directives do the same logic,
-except that the assembler will complain if it receives a number out of range, this is because each memory address holds 32 bits
+except that the assembler will complain if it receives a number out of range, this is because each memory address of the custom CPU holds 32 bits
 
+# :computer: Executing an example
+
+With Python3 already installed and findable on the path, run the following command inside the directory of this proyect:
+
+`python3 assembler.py ISA.cfg examples/mult.asm`
+
+It should generate a file `examples/mult.mem` with the compiled output
