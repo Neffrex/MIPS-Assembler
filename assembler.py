@@ -127,9 +127,6 @@ def end_callback():
 def getLimit(bytes):
     return 2 ** (bytes*8)
 
-def effective_address(base, offset):
-  pass
-
 # Splits the line in 4 fields: Label, Mnemonic, Operands and Comment
 # Label: String, Mnemonic: String, Operands: List(String), Comment: String
 # In case of a field that is not present in the line it would asign `None` to it
@@ -223,7 +220,6 @@ def parse_token(format, tokens):
     
     match field_symbol:
         case "$":
-            
             register_key = str(tokens[field_num]).replace(",", "")
             if register_key in register_table:
                 return register_table[register_key]
@@ -261,7 +257,7 @@ def parse_token(format, tokens):
             else:
                 raise Exception(ERROR_WRONG_ADDRESS_FORMAT.format(tokens[field_num]))
 
-def init():
+def init(argv):
     global directive_table
     global register_table
     global format_table
@@ -321,7 +317,7 @@ def init():
         "J": "{:06b}{:026b}"
     }
 
-    parse_ISA("/home/casa/Documents/Python/MIPS-Assembler/ISA.cfg")
+    parse_ISA(argv[1])
 
 
 def main():
@@ -334,11 +330,16 @@ def main():
     global location_counter
 
     # Initialize tables and configurations
-    init()
+    init(sys.argv)
 
+    if sys.argc != 2:
+        print("ERROR: Missing input options")
+        print(f"Usage: {sys.argv[0]} <ISA_file> <source_code_file>")
+        sys.exit(1)
+        
     # TODO: Asign the first parameter to the source code name
     # Name of the source code file
-    source_code_name = "/home/casa/Documents/Python/MIPS-Assembler/mult.asm"
+    source_code_name = sys.argv[2]
     # Name of the halfway code file
     halfway_code_name = source_code_name + '.tmp'
     # Name of the machine code file, the output file
@@ -376,6 +377,7 @@ def main():
     halfway_code.write(".end\n")
 
     # Handle files
+    source_code.close()
     halfway_code.close()
     halfway_code = open(halfway_code_name, 'r')
     machine_code = open(machine_code_name, 'w')
@@ -420,6 +422,7 @@ def main():
             raise Exception("Error: No segment specified, try adding the directives `.text` or `.data` before the start of a segment")
 
     halfway_code.close()
+    machine_code.close()
 
 if __name__ == "__main__":
     main()
