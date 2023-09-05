@@ -51,7 +51,7 @@ fi:
 
 .data 
 
-uno: .word 1
-a: .word 3
+uno: .byte 1
+a: .half 3
 b: .word 5
-s: .asciiz "x"
+s: .word 0

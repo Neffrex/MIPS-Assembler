@@ -9,6 +9,7 @@
 # A Two-Pass Assembler implementation for MIPS
 
 import sys
+import os
 
 # TODO: Options to export to a configuration file
 DATA_SEGMENT_BASE_ADDRESS = 0x64
@@ -329,13 +330,14 @@ def main():
     global format_table
     global location_counter
 
-    # Initialize tables and configurations
-    init(sys.argv)
-
-    if sys.argc != 2:
+    # Handle parameters
+    if len(sys.argv) != 3:
         print("ERROR: Missing input options")
         print(f"Usage: {sys.argv[0]} <ISA_file> <source_code_file>")
         sys.exit(1)
+
+    # Initialize tables and configurations
+    init(sys.argv)
         
     # TODO: Asign the first parameter to the source code name
     # Name of the source code file
@@ -421,8 +423,11 @@ def main():
             # Undefined segment
             raise Exception("Error: No segment specified, try adding the directives `.text` or `.data` before the start of a segment")
 
+    # Close the files
     halfway_code.close()
     machine_code.close()
+    # Remove intermediate file
+    os.remove(halfway_code_name)
 
 if __name__ == "__main__":
     main()
