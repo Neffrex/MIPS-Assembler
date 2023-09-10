@@ -14,19 +14,26 @@ Keep in mind that it doesn't have all the functionality you would expect from a 
 
 # :memo: Valid directives
 
-| Syntax              | Description                                                                                 |
-| ------------------- | --------------------------------------------------------------------------------------------|
-| .ascii *str*        | Saves the String (str) in memory                                                            |
-| .asciiz *str*       | Saves the String (str), appending a final *null* value, in memory                           |
-| .byte *b1,...,bn*   | Saves *n*  8-bit literals (b1,...,bn) in consecutive memory                                 |
-| .half *h1,...,hn*   | Saves *n* 16-bit literals (h1,...,hn) in consecutive memory                                 |
-| .word *w1,...,wn*   | Saves *n* 32-bit literals (w1,...,wn) in consecutive memory                                 |
-| .text *[addr]*      | The following lines will be added to the *text* segment and only instructions are expected  |
-| .data *[addr]*      | The following lines will be added to the *data* segment and only data is expected           |
-| .globl *label*      | It has no logic, it ommits it while parsing the file, added for compatibility reasons       |
+| Syntax                      | Description                                                                                   |
+| --------------------------- | --------------------------------------------------------------------------------------------  |
+| .ascii <*str1, ..., strN*>  | Saves *N* Strings (str1,...,strN) in memory                                                   |
+| .asciiz <*str1, ..., strN*> | Saves *N* Strings (str1,...,strN), each one appended with a final *null* value, in memory     |
+| .byte <*b1, ..., bN*>       | Saves *N*  8-bit literals (b1,...,bn) in consecutive memory                                   |
+| .half <*h1, ..., hN*>       | Saves *N* 16-bit literals (h1,...,hn) in consecutive memory                                   |
+| .word <*w1, ..., wN*>       | Saves *N* 32-bit literals (w1,...,wn) in consecutive memory                                   |
+| .text *[addr]*              | The following lines will be added to the *text* segment and only instructions are expected, if *addr* is defined the segment will start at that address    |
+| .data *[addr]*              | The following lines will be added to the *data* segment and only data is expected, if *addr* is defined the segment will start at that address             |
+| .globl <*label*>            | It has no logic, it ommits it while parsing the file, added for compatibility reasons         |
 
 # :bulb: Things to be considered
 
 As this implementation is design for a custom CPU, the `.byte`, `.half` and `.word` directives do the same logic,
-except that the assembler will complain if it receives a number out of range, this is because each memory address holds 32 bits
+except that the assembler will complain if it receives a number out of range, this is because each memory address of the custom CPU holds 32 bits
 
+# :computer: Executing an example
+
+With Python3 already installed and findable on the path, run the following command inside the directory of this proyect:
+
+`python3 assembler.py ISA.cfg examples/mult.asm`
+
+It should generate a file `examples/mult.mem` with the compiled output
