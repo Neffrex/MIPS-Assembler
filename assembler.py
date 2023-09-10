@@ -10,6 +10,7 @@
 
 import sys
 import os
+import tempfile as temp
 
 # TODO: Options to export to a configuration file
 DATA_SEGMENT_BASE_ADDRESS = 0x64
@@ -23,6 +24,43 @@ HALF_SIZE = 1
 WORD_SIZE = 1
 INSTRUCTION_SIZE = WORD_SIZE
 
+#---          ---#
+#-- Exceptions --#
+#---          ---#
+
+class UndefinedMnemonic(Exception):
+    mnemonic: str
+    file: str
+    line_number: int
+    line: str
+
+    def __init__(self, mnemonic: str, file: str, line_number: int, line: str, *args: object) -> None:
+        super().__init__(*args)
+        self.mnemonic = mnemonic
+        self.file = file
+        self.line_number = line_number
+        self.line = line
+
+    def __str__(self) -> str:
+        return f"""ERROR: Undefined Mnemonic({self.mnemonic})
+        \tIn file({self.file}) at line({self.line_number})
+        \t\t{self.line}
+        """
+
+class InvalidSegmentContent(Exception):
+    segment: str
+    invalid_content: str
+
+    def __init__(self, segment: str, invalid_content: str, *args: object) -> None:
+        super().__init__(*args)
+        self.segment = segment
+        self.invalid_content = invalid_content
+
+    def __str__(self) -> str:
+        return f"""ERROR: Invalid Segment Content In Segment `{self.segment}`
+        \tInvalid Content: {self.invalid_content}
+        """
+    
 #---         ---#
 #-- Variables --#
 #---         ---#
@@ -104,22 +142,19 @@ def word_callback(*literals):
         location_counter = int(location_counter) + WORD_SIZE
     return result
 
-def data_callback(address=DATA_SEGMENT_BASE_ADDRESS):
+def data_callback(address:int=DATA_SEGMENT_BASE_ADDRESS):
     global location_counter
     location_counter = int(address)
     return ".data " + str(address)
 
-def text_callback(address=TEXT_SEGMENT_BASE_ADDRESS):
+def text_callback(address:int=TEXT_SEGMENT_BASE_ADDRESS):
     global location_counter
     location_counter = int(address)
     return ".text " + str(address)
 
 def globl_callback(label):
-    #return ".globl " + str(label)
     pass
 
-def end_callback():
-    return ".end"
 
 #---                   ---#
 #-- Auxiliary Functions --#
@@ -146,7 +181,7 @@ def tokenize(line):
         match phase:
             case 0: # Possible Label
                 if uncommented_tokens[0].endswith(":"):
-                    label = uncommented_tokens[0][0:-1]
+                    label = uncommented_tokens[0]
                     del uncommented_tokens[0]
             case 1: # Mnemonic
                 mnemonic = uncommented_tokens[0]
@@ -264,15 +299,14 @@ def init(argv):
     global format_table
 
     directive_table = {
-        ".ascii":   ascii_callback,
-        ".asciiz":  asciiz_callback,
-        ".byte":    byte_callback,
-        ".half":    half_callback,
-        ".word":    word_callback,
-        ".text":    text_callback,
-        ".data":    data_callback,
-        ".globl":   globl_callback,
-        ".end":     end_callback
+        ".ASCII":   ascii_callback,
+        ".ASCIIZ":  asciiz_callback,
+        ".BYTE":    byte_callback,
+        ".HALF":    half_callback,
+        ".WORD":    word_callback,
+        ".TEXT":    text_callback,
+        ".DATA":    data_callback,
+        ".GLOBL":   globl_callback
     }
 
     # TODO: Considerate change this table to an enum
@@ -338,96 +372,80 @@ def main():
 
     # Initialize tables and configurations
     init(sys.argv)
-        
-    # TODO: Asign the first parameter to the source code name
+    
     # Name of the source code file
-    source_code_name = sys.argv[2]
-    # Name of the halfway code file
-    halfway_code_name = source_code_name + '.tmp'
-    # Name of the machine code file, the output file
-    machine_code_name = str(source_code_name).split(".")[0] + '.mem'
-    
-    # Open the files
-    source_code = open(source_code_name, 'r')
-    source_lines = source_code.readlines()
-    halfway_code = open(halfway_code_name, 'w')
+    source_name = sys.argv[2]
+    # Name of the machine code file (the output file)
+    output_name = os.path.splitext(source_name)[0] + ".mem"
+    # Bridge file between the First and the Second Pass
+    intermediate_file = temp.TemporaryFile()
 
-    # First Pass of the assembler
-    for line in source_lines:
-        # Tokenize the line
-        label, mnemonic, operands, comment = tokenize(line)
+    with temp.TemporaryFile(mode="w+") as intermediate_file:
+        # First Pass
+        with open(source_name, "r") as source_file:
+            for line_number, line in enumerate(source_file):
+                label, mnemonic, operands, comment = tokenize(line)
 
-        # Handle Label
-        if label:
-            symbol_table[label] = location_counter
-            halfway_code.write(label + ":\n")
+                # Handle Label
+                if label:
+                    # TODO: Syntax check label
+                    symbol_table[label[:-1]] = location_counter
+                    intermediate_file.write(f"{label} ")
 
-        # Handle Mnemonic (Instruction / Directive)
-        if mnemonic:
-            mnemonic_upper=str.upper(mnemonic)
-            if mnemonic_upper in opcode_table:
-                halfway_code.write(mnemonic + " " + " ".join(str(operand) for operand in operands))
-                halfway_code.write("\n")
-                location_counter += INSTRUCTION_SIZE
-            elif mnemonic in directive_table:
-                # Callback function with optional operands
-                result = directive_table[mnemonic](*operands)
-                if result != None:
-                    halfway_code.write(result + "\n")
-            else:
-                raise Exception(f"Undefined Mnemonic: {mnemonic}")
-    halfway_code.write(".end\n")
+                # Handle Mnemonic
+                if mnemonic:
+                    # Uppercase Mnemonic for case insensitive comparations
+                    mnemonic_upper = mnemonic.upper()
 
-    # Handle files
-    source_code.close()
-    halfway_code.close()
-    halfway_code = open(halfway_code_name, 'r')
-    machine_code = open(machine_code_name, 'w')
+                    if mnemonic_upper in opcode_table:
+                        intermediate_file.write(f"{mnemonic} ")
+                        for operand in operands:
+                            intermediate_file.write(f"{operand} ")
+                        intermediate_file.write("\n")
+                        location_counter += INSTRUCTION_SIZE
+                    elif mnemonic_upper in directive_table:
+                        result = directive_table[mnemonic_upper](*operands)
+                        if result != None:
+                            intermediate_file.write(result + "\n")
+                    else:
+                        raise UndefinedMnemonic(mnemonic=mnemonic, line_number=line_number, line=line, file=source_name)
+        
+        # Restart intermediate file for reading
+        intermediate_file.seek(0)
 
-    segment = None
-    halfway_lines = halfway_code.readlines()
-    # Second Pass of the assembler
-    location_counter = 0
-    for line in halfway_lines:
-        tokens = line.split()
-        # Handle Segment Directive
-        if tokens[0] == ".text" or tokens [0] == ".data":
-            segment = tokens[0]
-            location_counter = int(tokens[1])
-            continue
+        # Second Pass
+        with open(output_name, "w") as output_file:
+            segment = None
+            location_counter = 0
 
-        if tokens[0] == ".end":
-            machine_code.write("\n")
-            break
-    
-        if tokens[0].endswith(":"):
-            machine_code.write("\n# {}\n {:02X}/ ".format(tokens[0], location_counter))
-            continue
+            for line in intermediate_file:
+                label, mnemonic, operands, comment = tokenize(line)
+                
+                if label:
+                    output_file.write(f"\n{label}\n{location_counter}/ ")
+                
+                if mnemonic:
+                    mnemonic_upper = mnemonic.upper()
 
-        # Handle Instructions/Data
-        if segment == ".text":
-            # Text segment
-            mnemonic = tokens[0]
-            mnemonic_upper = mnemonic.upper()
-            if (mnemonic_upper in ISA):
-                machine_code.write(f"{parse_instruction(*tokens)} ")
-                location_counter += int(INSTRUCTION_SIZE)
-            else:
-                raise Exception(f"ERROR: No such instruction: {mnemonic}")
-        elif segment == ".data":
-            # Data segment
-            for token in tokens:
-                machine_code.write("{:08X} ".format(int(token)))
-                location_counter += int(WORD_SIZE)
-        else:
-            # Undefined segment
-            raise Exception("Error: No segment specified, try adding the directives `.text` or `.data` before the start of a segment")
-
-    # Close the files
-    halfway_code.close()
-    machine_code.close()
-    # Remove intermediate file
-    os.remove(halfway_code_name)
+                    if mnemonic_upper.isdigit():
+                        # Check valid Segment
+                        if segment != ".DATA":
+                            raise InvalidSegmentContent(segment=segment, invalid_content=mnemonic)
+                        # Translate Data
+                        for literal in [mnemonic] + operands:
+                            output_file.write("{:08x} ".format(int(literal)))
+                            location_counter += 1
+                    elif mnemonic_upper in opcode_table:
+                        # Check valid Segment
+                        if segment != ".TEXT":
+                            raise InvalidSegmentContent(segment=segment, invalid_content=mnemonic)
+                        # Translate Instructions
+                        if mnemonic_upper in ISA:
+                            output_file.write(f"{parse_instruction(mnemonic, *operands)} ")
+                            location_counter += 1
+                    elif mnemonic_upper in directive_table:
+                        segment = mnemonic_upper
+                        directive_table[mnemonic_upper](*operands)
 
 if __name__ == "__main__":
     main()
