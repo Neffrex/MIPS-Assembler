@@ -1,0 +1,23 @@
+#!/bin/bash
+#---
+# author:  Jose Luis Pueyo Viltres
+# e-mail:  joseluis.pueyo@estudiants.urv.cat
+# date:    Tue Apr  9 19:43:45 PM UTC 2024
+# version: 0.1
+#---
+# CLI Tool functionality to run the assembler
+
+python_version=$(python3 -V 2>&1)
+
+if [[ $? -ne 0 ]]; then
+  echo "ERROR: Python3 is missing" >&2
+  exit 1
+fi
+
+if [[ $# -ne 1 ]]; then
+  echo "ERROR: Missing path of the source code" >&2
+  echo "Usage: assembler-cli.sh $0 <source_file>" >&2
+  exit 2
+fi
+
+python3 src/assembler.py assets/ISA.cfg $1

@@ -32,8 +32,15 @@ except that the assembler will complain if it receives a number out of range, th
 
 # :computer: Executing an example
 
-With Python3 already installed and findable on the path, run the following command inside the directory of this proyect:
+With Python3 already installed and findable on the path, run the following commands inside the directory of this proyect:
 
-`python3 assembler.py ISA.cfg examples/mult.asm`
+```
+chmod +x ./assembler-cli.sh
+./assembler-cli.sh run examples/mult.asm
+```
+
+Another option is to manually execute the main source file with python as follows:
+
+`python3 assembler.py ../assets/ISA.cfg ../examples/mult.asm`
 
 It should generate a file `examples/mult.mem` with the compiled output

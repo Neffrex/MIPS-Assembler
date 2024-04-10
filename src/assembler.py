@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 #---
 # author:  Jose Luis Pueyo Viltres
 # e-mail:  joseluis.pueyo@estudiants.urv.cat
@@ -13,9 +12,9 @@ import sys
 import os
 import tempfile as temp
 # Import external modules
-from exceptions import *
-from directives import *
-from instructions import *
+from modules.exceptions import *
+from modules.directives import *
+from modules.instructions import *
 
 # TODO: Options to export to a configuration file
 INSTRUCTION_SIZE = WORD_SIZE
