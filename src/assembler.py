@@ -284,7 +284,7 @@ def main():
                 label, mnemonic, operands, comment = instruction.get_tokens()
                 
                 if label:
-                    output_file.write(f"\n{label}\n{state['location_counter']}/ ")
+                    output_file.write("\n{}\n{:02X}/ ".format(label, state['location_counter']))
                 
                 if mnemonic:
                     mnemonic_upper = mnemonic.upper()
